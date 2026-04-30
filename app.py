@@ -26,6 +26,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialisation de la base de données
 db.init_app(app)
 
+# Création des tables au démarrage (important pour Render)
+with app.app_context():
+    db.create_all()
+
 # Initialisation du service Gemini
 gemini = ServiceGemini()
 
