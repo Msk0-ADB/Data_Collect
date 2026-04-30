@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Tableau de bord</h2>
+    <p>Vue d'ensemble de votre activité commerciale</p>
+</div>
+
+<!-- STATISTIQUES CLÉS -->
+<div class="grid-4">
+    <div class="stat-card">
+        <div class="stat-value">{{ recette_today | int }} FCFA</div>
+        <div class="stat-label">Recette aujourd'hui</div>
+        {% if analyse_rapide.tendance == 'hausse' %}
+            <div class="stat-change up">↗ Tendance en hausse</div>
+        {% elif analyse_rapide.tendance == 'baisse' %}
+            <div class="stat-change down">↘ Tendance en baisse</div>
+        {% else %}
+            <div class="stat-change">→ Activité stable</div>
+        {% endif %}
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ recette_totale | int }} FCFA</div>
+        <div class="stat-label">Recette totale</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ total_commandes }}</div>
+        <div class="stat-label">Commandes totales</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-value">{{ nb_articles }}</div>
+        <div class="stat-label">Articles référencés</div>
+    </div>
+</div>
+
+<!-- GRAPHIQUE PRINCIPAL -->
+<div class="grid-2">
+    <div class="card" style="grid-column: span 1">
+        <div class="card-title">📈 Évolution des recettes (30 derniers jours)</div>
+        <canvas id="graphiqueRecettes" height="250"></canvas>
+    </div>
+    
+    <!-- ANALYSE IA -->
+    <div class="card">
+        <div class="card-title">🤖 Analyse IA (Gemini)</div>
+        <div id="ia-container">
+            <p style="color: var(--text2); font-size: 14px; margin-bottom: 16px;">
+                Cliquez pour obtenir une analyse intelligente de votre activité.
+            </p>
+            <button class="btn btn-primary" onclick="lancerAnalyseIA()">
+                ✨ Analyser avec Gemini
+            </button>
+        </div>
+        <div id="ia-result" style="display:none"></div>
+    </div>
+</div>
+
+<!-- TABLEAU DERNIÈRES COMMANDES -->
+<div class="card">
+    <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+        <span>📋 Dernières commandes</span>
+        <a href="/saisie" class="btn btn-primary" style="font-size:12px; padding:6px 14px">
+            + Nouvelle vente
+        </a>
+    </div>
+    
+    {% if dernieres_commandes %}
+    <div class="table-container" style="margin-top: 16px">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Date</th>
+                    <th>Client</th>
+                    <th>Articles</th>
+                    <th>Total</th>
+                    <th>Statut</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cmd in dernieres_commandes %}
+                <tr>
+                    <td style="color: var(--text3)">#{{ cmd.id }}</td>
+                    <td>{{ cmd.date }}</td>
+                    <td>{{ cmd.client }}</td>
+                    <td>{{ cmd.lignes | length }} article(s)</td>
+                    <td style="color: var(--success); font-weight: 600">{{ cmd.total | int }} FCFA</td>
+                    <td><span class="badge badge-success">Validée</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info" style="margin-top: 16px">
+        Aucune vente enregistrée. <a href="/saisie" style="color: var(--accent)">Saisir la première vente →</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- CHAT IA -->
+<div class="card" style="margin-top: 24px">
+    <div class="card-title">💬 Chat avec l'assistant IA</div>
+    <div id="chat-messages" style="min-height:100px; max-height:300px; overflow-y:auto; margin-bottom:12px; padding:12px; background:var(--bg3); border-radius:8px; font-size:13px; color:var(--text2)">
+        <p><strong style="color:var(--accent)">Assistant :</strong> Bonjour ! Je suis votre assistant commercial. Posez-moi une question sur votre activité.</p>
+    </div>
+    <div style="display:flex; gap:8px">
+        <input type="text" id="chat-input" class="form-input" placeholder="Ex: Comment améliorer mes ventes ?" style="flex:1">
+        <button class="btn btn-primary" onclick="envoyerChat()">Envoyer</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ============================================================
+// GRAPHIQUE DES RECETTES (Chart.js)
+// ============================================================
+const donneesGraphique = {{ graphique_data | tojson }};
+
+if (donneesGraphique.length > 0) {
+    const ctx = document.getElementById('graphiqueRecettes').getContext('2d');
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: donneesGraphique.map(d => d.date),
+            datasets: [{
+                label: 'Recette journalière (FCFA)',
+                data: donneesGraphique.map(d => d.recette_journaliere),
+                borderColor: '#6c63ff',
+                backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#6c63ff',
+                pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#9898b0' } } },
+            scales: {
+                x: { ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } },
+                y: { ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } }
+            }
+        }
+    });
+} else {
+    document.getElementById('graphiqueRecettes').parentElement.innerHTML += 
+        '<p style="color:var(--text3); font-size:13px; margin-top:12px">Aucune donnée. Saisissez vos ventes pour voir le graphique.</p>';
+}
+
+// ============================================================
+// ANALYSE IA (Gemini)
+// ============================================================
+async function lancerAnalyseIA() {
+    document.getElementById('ia-container').innerHTML = '<div class="spinner"></div> Analyse en cours...';
+    
+    try {
+        const resp = await fetch('/api/analyse-ia', { method: 'POST' });
+        const data = await resp.json();
+        
+        if (data.erreur) {
+            document.getElementById('ia-container').innerHTML = `<div class="alert alert-warning">${data.erreur}</div>`;
+            return;
+        }
+        
+        const tendanceBadge = data.tendance === 'hausse' 
+            ? '<span class="badge badge-success">↗ En hausse</span>'
+            : data.tendance === 'baisse' 
+                ? '<span class="badge badge-danger">↘ En baisse</span>'
+                : '<span class="badge badge-info">→ Stable</span>';
+        
+        document.getElementById('ia-container').style.display = 'none';
+        document.getElementById('ia-result').style.display = 'block';
+        document.getElementById('ia-result').innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px">
+                ${tendanceBadge}
+                <span style="font-size:13px; color:var(--text2)">Score santé : <strong style="color:var(--accent)">${data.score_sante}/100</strong></span>
+                ${data.alerte_penurie ? '<span class="badge badge-danger">⚠ Risque pénurie</span>' : ''}
+            </div>
+            <p style="font-size:14px; color:var(--text2); margin-bottom:12px">${data.diagnostic}</p>
+            <p style="font-size:13px; color:var(--info)">${data.prediction_semaine}</p>
+            <div style="margin-top:12px">
+                <p style="font-size:12px; color:var(--text3); margin-bottom:6px">CONSEILS IMMÉDIATS</p>
+                ${(data.conseils_immediats || []).map(c => `<div style="padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; color:var(--text2)">• ${c}</div>`).join('')}
+            </div>
+            <button class="btn btn-outline" style="margin-top:12px; font-size:12px" onclick="location.reload()">
+                🔄 Relancer l'analyse
+            </button>
+        `;
+    } catch (e) {
+        document.getElementById('ia-container').innerHTML = '<div class="alert alert-danger">Erreur de connexion à l\'API.</div>';
+    }
+}
+
+// ============================================================
+// CHAT IA
+// ============================================================
+async function envoyerChat() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+    
+    const chatDiv = document.getElementById('chat-messages');
+    chatDiv.innerHTML += `<p style="margin-top:8px"><strong style="color:var(--text)">Vous :</strong> ${msg}</p>`;
+    input.value = '';
+    chatDiv.innerHTML += '<p id="typing" style="color:var(--text3); font-style:italic">Assistant écrit...</p>';
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+    
+    try {
+        const resp = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+        });
+        const data = await resp.json();
+        document.getElementById('typing').remove();
+        chatDiv.innerHTML += `<p style="margin-top:8px"><strong style="color:var(--accent)">Assistant :</strong> ${data.reponse}</p>`;
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+    } catch (e) {
+        document.getElementById('typing').remove();
+        chatDiv.innerHTML += '<p style="color:var(--danger)">Erreur de connexion.</p>';
+    }
+}
+
+document.getElementById('chat-input').addEventListener('keypress', e => {
+    if (e.key === 'Enter') envoyerChat();
+});
+</script>
+{% endblock %}

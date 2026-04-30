@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Analyse ML{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Analyse Machine Learning</h2>
+    <p>{{ nb_jours }} jours de données analysés · 5 concepts ML appliqués</p>
+</div>
+
+{% if nb_jours < 3 %}
+<div class="alert alert-warning">
+    ⚠ Saisissez au moins 3 jours de ventes pour activer les analyses ML.
+    <a href="/saisie" style="color:var(--warning); text-decoration:underline">Saisir des ventes →</a>
+</div>
+{% else %}
+
+<!-- CONCEPT 1 : RÉGRESSION LINÉAIRE SIMPLE -->
+{% if resultats.regression_simple %}
+<div class="card" style="margin-bottom:24px">
+    <div class="card-title">📐 Concept 1 — Régression linéaire simple</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:16px">
+        Prédit la recette future en fonction du temps. Formule : <code style="background:var(--bg3); padding:2px 6px; border-radius:4px; color:var(--accent)">{{ resultats.regression_simple.equation }}</code>
+    </p>
+    
+    <div class="grid-3">
+        <div style="text-align:center; padding:16px; background:var(--bg3); border-radius:8px">
+            <div style="font-size:22px; font-weight:700; color:
+                {% if resultats.regression_simple.tendance == 'hausse' %}var(--success)
+                {% elif resultats.regression_simple.tendance == 'baisse' %}var(--danger)
+                {% else %}var(--info){% endif %}">
+                {% if resultats.regression_simple.tendance == 'hausse' %}↗{% elif resultats.regression_simple.tendance == 'baisse' %}↘{% else %}→{% endif %}
+                {{ resultats.regression_simple.tendance | upper }}
+            </div>
+            <div style="font-size:11px; color:var(--text3); margin-top:4px">TENDANCE</div>
+        </div>
+        <div style="text-align:center; padding:16px; background:var(--bg3); border-radius:8px">
+            <div style="font-size:22px; font-weight:700; color:var(--accent)">{{ resultats.regression_simple.r2_score }}</div>
+            <div style="font-size:11px; color:var(--text3); margin-top:4px">SCORE R² (précision)</div>
+        </div>
+        <div style="text-align:center; padding:16px; background:var(--bg3); border-radius:8px">
+            <div style="font-size:22px; font-weight:700; color:var(--warning)">{{ resultats.regression_simple.pente }} FCFA/j</div>
+            <div style="font-size:11px; color:var(--text3); margin-top:4px">ÉVOLUTION/JOUR</div>
+        </div>
+    </div>
+    
+    <canvas id="chart-rl" style="margin-top:20px" height="200"></canvas>
+    
+    {% if resultats.regression_simple.predictions_7j %}
+    <div style="margin-top:16px">
+        <p style="font-size:12px; color:var(--text3); margin-bottom:8px">PRÉDICTIONS 7 PROCHAINS JOURS</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+            {% for pred in resultats.regression_simple.predictions_7j %}
+            <span class="badge badge-info">J+{{ loop.index }} : {{ pred | int }} FCFA</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- CONCEPT 2 : RÉGRESSION MULTIPLE -->
+{% if resultats.regression_multiple %}
+<div class="card" style="margin-bottom:24px">
+    <div class="card-title">📊 Concept 2 — Régression linéaire multiple</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:16px">
+        {{ resultats.regression_multiple.interpretation }} · R² = <strong>{{ resultats.regression_multiple.r2_score }}</strong>
+    </p>
+    
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px">
+        {% for var, imp in resultats.regression_multiple.importances.items() %}
+        <div style="padding:8px 14px; background:var(--bg3); border-radius:8px; font-size:13px">
+            <div style="color:var(--accent); font-weight:600">{{ imp }}</div>
+            <div style="color:var(--text3); font-size:11px">{{ var }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="alert alert-info">
+        💡 Prévision pour demain : <strong>{{ resultats.regression_multiple.prevision_demain | int }} FCFA</strong>
+    </div>
+</div>
+{% endif %}
+
+<!-- CONCEPT 3 : RÉDUCTION DE DIMENSIONNALITÉ -->
+{% if resultats.reduction_dim and not resultats.reduction_dim.erreur %}
+<div class="card" style="margin-bottom:24px">
+    <div class="card-title">🔬 Concept 3 — Réduction de dimensionnalité (PCA + LDA)</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:16px">
+        Le PCA compresse les données en 2 dimensions. 
+        Variance expliquée : <strong style="color:var(--accent)">{{ resultats.reduction_dim.pca.variance_totale }}%</strong> de l'information conservée.
+    </p>
+    <canvas id="chart-pca" height="250"></canvas>
+</div>
+{% endif %}
+
+<!-- CONCEPT 4 : CLASSIFICATION SUPERVISÉE -->
+{% if resultats.classification and not resultats.classification.erreur %}
+<div class="card" style="margin-bottom:24px">
+    <div class="card-title">🎯 Concept 4 — Classification supervisée</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:16px">
+        Comparaison de 3 algorithmes pour prédire le type de journée.
+    </p>
+    
+    <div class="grid-3">
+        {% for modele, info in resultats.classification.modeles.items() %}
+        <div style="padding:16px; background:var(--bg3); border-radius:8px; {% if modele == resultats.classification.meilleur_modele %}border:1px solid var(--accent){% endif %}">
+            <div style="font-size:14px; font-weight:600; color:var(--text)">{{ modele }}</div>
+            {% if info.accuracy is defined %}
+            <div style="font-size:20px; font-weight:700; color:var(--accent); margin:8px 0">{{ (info.accuracy * 100) | int }}%</div>
+            <div style="font-size:11px; color:var(--text3)">précision</div>
+            {% if modele == resultats.classification.meilleur_modele %}
+            <span class="badge badge-success" style="margin-top:6px">Meilleur modèle</span>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="alert {% if resultats.classification.prediction_demain == 1 %}alert-success{% else %}alert-warning{% endif %}" style="margin-top:16px">
+        {% if resultats.classification.prediction_demain == 1 %}
+        ✅ Prédiction demain : <strong>Bon jour de vente probable</strong>
+        {% else %}
+        ⚠ Prédiction demain : <strong>Journée difficile prévue</strong> — Préparez des promotions !
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- CONCEPT 5 : CLUSTERING K-MEANS -->
+{% if resultats.clustering and not resultats.clustering.erreur %}
+<div class="card" style="margin-bottom:24px">
+    <div class="card-title">🔵 Concept 5 — Clustering non-supervisé (K-Means)</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:16px">
+        {{ resultats.clustering.interpretation }} · Score silhouette : <strong>{{ resultats.clustering.silhouette_score }}</strong>
+    </p>
+    
+    <div class="grid-3">
+        {% for cluster_id, profil in resultats.clustering.profils.items() %}
+        <div style="padding:16px; background:var(--bg3); border-radius:8px">
+            <div style="font-size:13px; font-weight:600; color:var(--text)">{{ profil.nom }}</div>
+            <div style="font-size:20px; font-weight:700; color:var(--accent); margin:6px 0">{{ profil.nb_jours }} jours</div>
+            <div style="font-size:12px; color:var(--text3)">Recette moy. : {{ profil.recette_moyenne | int }} FCFA</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- ANALYSE HEBDOMADAIRE -->
+{% if resultats.hebdomadaire %}
+<div class="card">
+    <div class="card-title">📅 Évolution hebdomadaire</div>
+    <canvas id="chart-hebdo" height="200"></canvas>
+</div>
+{% endif %}
+
+{% endif %} {# fin du if nb_jours >= 3 #}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const resultats = {{ resultats | tojson }};
+
+// Graphique Régression Linéaire Simple
+if (resultats.regression_simple && document.getElementById('chart-rl')) {
+    new Chart(document.getElementById('chart-rl'), {
+        type: 'line',
+        data: {
+            labels: resultats.regression_simple.valeurs_reelles.map((_, i) => 'J' + (i+1)),
+            datasets: [
+                {
+                    label: 'Recettes réelles',
+                    data: resultats.regression_simple.valeurs_reelles,
+                    borderColor: '#6c63ff', backgroundColor: 'rgba(108,99,255,0.1)', tension: 0.3
+                },
+                {
+                    label: 'Droite de régression',
+                    data: resultats.regression_simple.valeurs_predites,
+                    borderColor: '#ff6584', borderDash: [5, 5], borderWidth: 2, pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#9898b0' } } },
+            scales: {
+                x: { ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } },
+                y: { ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } }
+            }
+        }
+    });
+}
+
+// Graphique PCA (scatter plot)
+if (resultats.reduction_dim && resultats.reduction_dim.pca && document.getElementById('chart-pca')) {
+    const composantes = resultats.reduction_dim.pca.composantes;
+    const classes = resultats.reduction_dim.classes_jours;
+    const couleurs = ['#ff4757', '#ffa502', '#2ed573'];
+    const labels_cls = ['Mauvais jour', 'Jour moyen', 'Bon jour'];
+    
+    const datasets = [0, 1, 2].map(c => ({
+        label: labels_cls[c],
+        data: composantes.filter((_, i) => classes[i] === c).map(p => ({ x: p[0], y: p[1] || 0 })),
+        backgroundColor: couleurs[c], pointRadius: 7
+    }));
+    
+    new Chart(document.getElementById('chart-pca'), {
+        type: 'scatter',
+        data: { datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#9898b0' } } },
+            scales: {
+                x: { title: { display: true, text: 'Composante 1', color: '#5a5a7a' }, ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } },
+                y: { title: { display: true, text: 'Composante 2', color: '#5a5a7a' }, ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } }
+            }
+        }
+    });
+}
+
+// Graphique hebdomadaire
+if (resultats.hebdomadaire && resultats.hebdomadaire.length > 0 && document.getElementById('chart-hebdo')) {
+    new Chart(document.getElementById('chart-hebdo'), {
+        type: 'bar',
+        data: {
+            labels: resultats.hebdomadaire.map(d => `S${d.semaine}`),
+            datasets: [{
+                label: 'Recette hebdomadaire (FCFA)',
+                data: resultats.hebdomadaire.map(d => d.recette_totale),
+                backgroundColor: resultats.hebdomadaire.map(d => 
+                    d.evolution === 'hausse' ? 'rgba(67,233,123,0.7)' : 
+                    d.evolution === 'baisse' ? 'rgba(255,71,87,0.7)' : 'rgba(108,99,255,0.7)'
+                ),
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#9898b0' } } },
+            scales: {
+                x: { ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } },
+                y: { ticks: { color: '#5a5a7a' }, grid: { color: '#2e2e42' } }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

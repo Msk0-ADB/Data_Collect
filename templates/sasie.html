@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Nouvelle vente{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Enregistrer une vente</h2>
+    <p>Saisissez les articles et quantités de la commande</p>
+</div>
+
+<div class="grid-2">
+    <!-- FORMULAIRE COMMANDE -->
+    <div class="card">
+        <div class="card-title">📝 Détails de la commande</div>
+        
+        <div class="form-group">
+            <label class="form-label">Date de la vente</label>
+            <input type="date" id="date-vente" class="form-input" value="{{ today }}">
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Client (optionnel)</label>
+            <input type="text" id="client" class="form-input" placeholder="Nom du client">
+        </div>
+        
+        <div class="card-title" style="margin-top: 20px">🛒 Articles commandés</div>
+        <div id="lignes-container">
+            <!-- Les lignes sont ajoutées dynamiquement -->
+        </div>
+        
+        <button class="btn btn-outline" onclick="ajouterLigne()" style="margin-top: 8px; width:100%">
+            + Ajouter un article
+        </button>
+        
+        <div style="margin-top: 20px; padding-top:16px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center">
+            <div>
+                <div style="font-size:12px; color:var(--text3)">TOTAL</div>
+                <div style="font-size:24px; font-weight:700; color:var(--success)" id="total-display">0 FCFA</div>
+            </div>
+            <button class="btn btn-success" onclick="validerCommande()">
+                ✓ Valider la vente
+            </button>
+        </div>
+        
+        <div id="message-validation" style="margin-top:12px"></div>
+    </div>
+    
+    <!-- PANEL ARTICLE + RÉSUMÉ JOURNALIER -->
+    <div>
+        <!-- Ajout d'article -->
+        <div class="card" style="margin-bottom: 20px">
+            <div class="card-title">📦 Ajouter un nouvel article</div>
+            <div class="form-group">
+                <label class="form-label">Nom de l'article</label>
+                <input type="text" id="new-article-nom" class="form-input" placeholder="Ex: Tomates (1kg)">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Prix unitaire (FCFA)</label>
+                <input type="number" id="new-article-prix" class="form-input" placeholder="500">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Catégorie</label>
+                <select id="new-article-cat" class="form-input">
+                    <option>Épicerie</option><option>Boulangerie</option>
+                    <option>Laitier</option><option>Boissons</option>
+                    <option>Hygiène</option><option>Céréales</option><option>Autre</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="ajouterArticle()" style="width:100%">
+                Enregistrer l'article
+            </button>
+            <div id="msg-article" style="margin-top:8px; font-size:13px"></div>
+        </div>
+        
+        <!-- Liste des articles disponibles -->
+        <div class="card">
+            <div class="card-title">📋 Articles disponibles ({{ articles | length }})</div>
+            <div class="table-container" style="margin-top:12px; max-height:300px; overflow-y:auto">
+                <table>
+                    <thead><tr><th>Article</th><th>Prix</th><th>Cat.</th></tr></thead>
+                    <tbody>
+                        {% for a in articles %}
+                        <tr>
+                            <td>{{ a.nom }}</td>
+                            <td style="color:var(--success)">{{ a.prix_unitaire | int }} FCFA</td>
+                            <td><span class="badge badge-info">{{ a.categorie }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Liste des articles chargée depuis l'API
+let articlesDisponibles = [];
+
+// Chargement des articles au démarrage
+async function chargerArticles() {
+    const resp = await fetch('/api/articles');
+    articlesDisponibles = await resp.json();
+    ajouterLigne(); // Ajouter une première ligne vide
+}
+
+// Ajoute une ligne de commande au formulaire
+function ajouterLigne() {
+    const container = document.getElementById('lignes-container');
+    const id = Date.now();
+    
+    const options = articlesDisponibles.map(a => 
+        `<option value="${a.id}" data-prix="${a.prix_unitaire}">${a.nom} — ${a.prix_unitaire} FCFA</option>`
+    ).join('');
+    
+    container.innerHTML += `
+        <div id="ligne-${id}" style="display:flex; gap:8px; align-items:center; margin-bottom:8px">
+            <select class="form-input article-select" style="flex:2" onchange="majTotal()">
+                <option value="">-- Choisir un article --</option>
+                ${options}
+            </select>
+            <input type="number" class="form-input qte-input" value="1" min="1" style="flex:1; width:80px" oninput="majTotal()">
+            <button class="btn btn-danger" onclick="document.getElementById('ligne-${id}').remove(); majTotal()" style="padding:8px 12px">✕</button>
+        </div>
+    `;
+}
+
+// Recalcule le total affiché
+function majTotal() {
+    let total = 0;
+    document.querySelectorAll('.article-select').forEach((sel, i) => {
+        const opt = sel.options[sel.selectedIndex];
+        const prix = parseFloat(opt.dataset.prix || 0);
+        const qte = parseFloat(document.querySelectorAll('.qte-input')[i].value || 0);
+        total += prix * qte;
+    });
+    document.getElementById('total-display').textContent = Math.round(total) + ' FCFA';
+}
+
+// Envoie la commande au serveur
+async function validerCommande() {
+    const lignes = [];
+    const selects = document.querySelectorAll('.article-select');
+    const qtes = document.querySelectorAll('.qte-input');
+    
+    selects.forEach((sel, i) => {
+        if (sel.value) {
+            lignes.push({ article_id: parseInt(sel.value), quantite: parseInt(qtes[i].value) });
+        }
+    });
+    
+    if (lignes.length === 0) {
+        document.getElementById('message-validation').innerHTML = 
+            '<div class="alert alert-warning">Ajoutez au moins un article.</div>';
+        return;
+    }
+    
+    const payload = {
+        date: document.getElementById('date-vente').value,
+        client: document.getElementById('client').value || 'Client anonyme',
+        lignes
+    };
+    
+    document.getElementById('message-validation').innerHTML = '<div class="spinner"></div>';
+    
+    const resp = await fetch('/saisie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    
+    if (data.success) {
+        document.getElementById('message-validation').innerHTML = 
+            `<div class="alert alert-success">✓ ${data.message} — Total : <strong>${data.total} FCFA</strong></div>`;
+        // Réinitialiser le formulaire
+        document.getElementById('lignes-container').innerHTML = '';
+        document.getElementById('client').value = '';
+        document.getElementById('total-display').textContent = '0 FCFA';
+        ajouterLigne();
+    } else {
+        document.getElementById('message-validation').innerHTML = 
+            `<div class="alert alert-danger">Erreur : ${data.message}</div>`;
+    }
+}
+
+// Ajoute un nouvel article dans la base
+async function ajouterArticle() {
+    const nom = document.getElementById('new-article-nom').value.trim();
+    const prix = document.getElementById('new-article-prix').value;
+    const cat = document.getElementById('new-article-cat').value;
+    
+    if (!nom || !prix) {
+        document.getElementById('msg-article').innerHTML = '<span style="color:var(--danger)">Nom et prix requis.</span>';
+        return;
+    }
+    
+    const resp = await fetch('/articles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nom, prix: parseFloat(prix), categorie: cat })
+    });
+    const data = await resp.json();
+    
+    if (data.success) {
+        document.getElementById('msg-article').innerHTML = '<span style="color:var(--success)">✓ Article ajouté !</span>';
+        document.getElementById('new-article-nom').value = '';
+        document.getElementById('new-article-prix').value = '';
+        await chargerArticles(); // Recharger la liste
+    }
+}
+
+// Date d'aujourd'hui par défaut
+document.getElementById('date-vente').value = new Date().toISOString().split('T')[0];
+
+// Démarrage
+chargerArticles();
+</script>
+{% endblock %}
